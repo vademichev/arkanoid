@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1a2b3c">
+    <title>Арканоид PWA</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Ccircle cx='90' cy='90' r='80' fill='%234a90e2'/%3E%3Crect x='60' y='60' width='60' height='60' fill='%23ffcc00' rx='5'/%3E%3C/svg%3E">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2b3c, #0d1b2a);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #e0e0e0;
+            -webkit-text-size-adjust: 100%;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 480px;
+            height: 85vh;
+            max-height: 85vh;
+            box-shadow: 0 0 25px rgba(0, 30, 60, 0.8);
+            border-radius: 16px;
+            overflow: hidden;
+            background: #0a1420;
+            border: 4px solid #2a4b6a;
+            touch-action: none;
+            cursor: default;
+        }
+        
+        canvas {
+            display: block;
+            margin: 0 auto;
+        }
+        
+        #instructions {
+            position: absolute;
+            bottom: 15px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            background: rgba(26, 43, 60, 0.92);
+            padding: 10px 18px;
+            border-radius: 24px;
+            font-size: 15px;
+            z-index: 100;
+            border: 1px solid #3a5b7a;
+            max-width: 92%;
+            margin: 0 auto;
+            line-height: 1.5;
+            font-weight: 500;
+            letter-spacing: -0.3px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        #score-display, #lives-display, #level-display {
+            position: absolute;
+            top: 12px;
+            font-size: 20px;
+            font-weight: bold;
+            z-index: 100;
+            text-shadow: 0 0 6px rgba(0, 0, 0, 0.7);
+            padding: 4px 10px;
+            border-radius: 12px;
+            background: rgba(10, 20, 32, 0.75);
+            border: 1px solid rgba(42, 75, 106, 0.8);
+        }
+        
+        #score-display {
+            left: 12px;
+            color: #4a90e2;
+        }
+        
+        #lives-display {
+            right: 12px;
+            color: #ff5252;
+        }
+        
+        #level-display {
+            left: 50%;
+            transform: translateX(-50%);
+            color: #5affb3;
+        }
+        
+        #game-over, #game-start, #level-complete {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 20, 32, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+            text-align: center;
+            padding: 25px;
+            backdrop-filter: blur(5px);
+        }
+        
+        #game-over h2, #game-start h2, #level-complete h2 {
+            font-size: 46px;
+            margin-bottom: 22px;
+            background: linear-gradient(to right, #4a90e2, #5affb3, #ffcc00);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 0 0 15px rgba(74, 144, 226, 0.6);
+            letter-spacing: 2px;
+            font-weight: 800;
+            text-transform: uppercase;
+            padding: 0 10px;
+        }
+        
+        #game-over p, #level-complete p, #game-start p {
+            font-size: 22px;
+            margin: 12px 0;
+            color: #e6e6e6;
+            max-width: 85%;
+            line-height: 1.4;
+        }
+        
+        #final-score, #level-score {
+            font-size: 30px;
+            margin: 18px 0;
+            color: #ffd700;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+            letter-spacing: 1px;
+        }
+        
+        .btn {
+            background: linear-gradient(to bottom, #4a90e2, #2a5b9a);
+            color: white;
+            border: none;
+            padding: 16px 50px;
+            font-size: 23px;
+            border-radius: 55px;
+            margin-top: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            letter-spacing: 1.2px;
+            box-shadow: 0 6px 20px rgba(0, 30, 80, 0.6);
+            position: relative;
+            overflow: hidden;
+            min-width: 220px;
+        }
+        
+        .btn::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 70%);
+            transform: scale(0);
+            transition: transform 0.5s ease;
+            z-index: 0;
+        }
+        
+        .btn:hover::after {
+            transform: scale(1);
+        }
+        
+        .btn span {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 30, 80, 0.8);
+        }
+        
+        .btn:active {
+            transform: translateY(1px);
+            box-shadow: 0 4px 15px rgba(0, 30, 80, 0.7);
+        }
+        
+        .btn.restart {
+            background: linear-gradient(to bottom, #ff5252, #cc0000);
+            box-shadow: 0 6px 20px rgba(100, 0, 0, 0.6);
+        }
+        
+        .btn.restart:hover {
+            box-shadow: 0 8px 25px rgba(120, 0, 0, 0.8);
+        }
+        
+        .btn.next-level {
+            background: linear-gradient(to bottom, #5affb3, #2a9a7a);
+            box-shadow: 0 6px 20px rgba(0, 80, 60, 0.6);
+        }
+        
+        .btn.next-level:hover {
+            box-shadow: 0 8px 25px rgba(0, 100, 70, 0.8);
+        }
+        
+        #pwa-install {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: linear-gradient(to right, #4a90e2, #5affb3);
+            color: white;
+            border: none;
+            padding: 14px 25px;
+            border-radius: 55px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 1000;
+            box-shadow: 0 5px 20px rgba(0, 30, 80, 0.7);
+            display: none;
+            max-width: 420px;
+            margin: 0 auto;
+            letter-spacing: 0.5px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(74, 144, 226, 0.7); }
+            70% { box-shadow: 0 0 0 12px rgba(74, 144, 226, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(74, 144, 226, 0); }
+        }
+        
+        #pwa-install:active {
+            transform: scale(0.98);
+        }
+        
+        .offline-badge {
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            background: #ff5252;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 1000;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+            display: none;
+        }
+        
+        .desktop-hint {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(42, 75, 106, 0.85);
+            color: #e0f7ff;
+            padding: 8px 16px;
+            border-radius: 30px;
+            font-size: 16px;
+            z-index: 150;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            pointer-events: none;
+            white-space: nowrap;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .show-hint {
+            opacity: 1;
+        }
+        
+        @media (max-height: 700px) {
+            #instructions {
+                bottom: 8px;
+                font-size: 13px;
+                padding: 7px 12px;
+            }
+            
+            .btn {
+                padding: 13px 40px;
+                font-size: 19px;
+                margin-top: 20px;
+            }
+            
+            #game-over h2, #game-start h2, #level-complete h2 {
+                font-size: 38px;
+            }
+        }
+        
+        @media (max-width: 320px) {
+            #game-container {
+                height: 82vh;
+                max-height: 82vh;
+                border-radius: 14px;
+            }
+            
+            #instructions {
+                font-size: 12px;
+                padding: 6px 10px;
+                bottom: 8px;
+            }
+            
+            #score-display, #lives-display, #level-display {
+                font-size: 18px;
+                padding: 3px 8px;
+            }
+        }
+        
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                transition: none !important;
+                animation: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="score-display">Счёт: 0</div>
+        <div id="lives-display">Жизни: 3</div>
+        <div id="level-display">Уровень: 1</div>
+        <div id="instructions">Управление: мышь на ПК, касание на мобильных • Разбейте все кирпичи</div>
+        <div class="desktop-hint" id="desktop-hint">← Двигайте мышью →</div>
+        
+        <div id="game-start">
+            <h2>АРКАНОИД</h2>
+            <p>Классическая игра-арканоид прямо в вашем браузере</p>
+            <button class="btn" id="start-btn"><span>НАЧАТЬ ИГРУ</span></button>
+            <p style="margin-top: 28px; font-size: 17px; max-width: 85%; line-height: 1.6;">
+                Установите игру на главный экран для полноэкранного режима и офлайн-доступа!<br>Нажмите «Поделиться» → «На экран «Домой»»
+            </p>
+        </div>
+        
+        <div id="game-over" style="display: none;">
+            <h2>ИГРА ОКОНЧЕНА</h2>
+            <p id="final-score">Счёт: 0</p>
+            <p>Попробуйте набрать больше очков!</p>
+            <button class="btn restart" id="restart-btn"><span>ИГРАТЬ СНОВА</span></button>
+        </div>
+        
+        <div id="level-complete" style="display: none;">
+            <h2>УРОВЕНЬ ПРОЙДЕН!</h2>
+            <p id="level-score">Счёт: 0</p>
+            <p>Отлично! Готовы к новому вызову?</p>
+            <button class="btn next-level" id="next-level-btn"><span>СЛЕДУЮЩИЙ УРОВЕНЬ</span></button>
+        </div>
+    </div>
+    
+    <button id="pwa-install">Установить игру для офлайн-режима</button>
+    <div class="offline-badge" id="offline-badge">Офлайн-режим</div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <script>
+        // Глобальные переменные игры
+        let game;
+        let score = 0;
+        let lives = 3;
+        let level = 1;
+        let ballSpeed = 250;
+        let gameOver = false;
+        let gameStarted = false;
+        let bricksDestroyed = 0;
+        let totalBricks = 0;
+        let deferredPrompt = null;
+        let isDesktop = false;
+        
+        // DOM элементы
+        const gameStartScreen = document.getElementById('game-start');
+        const gameOverScreen = document.getElementById('game-over');
+        const levelCompleteScreen = document.getElementById('level-complete');
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const nextLevelBtn = document.getElementById('next-level-btn');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const levelScoreDisplay = document.getElementById('level-score');
+        const scoreDisplay = document.getElementById('score-display');
+        const livesDisplay = document.getElementById('lives-display');
+        const levelDisplay = document.getElementById('level-display');
+        const installBtn = document.getElementById('pwa-install');
+        const offlineBadge = document.getElementById('offline-badge');
+        const desktopHint = document.getElementById('desktop-hint');
+        const instructionsElement = document.getElementById('instructions');
+        
+        // Определение типа устройства
+        function detectDeviceType() {
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile/i.test(navigator.userAgent) || 
+                           ('ontouchstart' in window) || 
+                           (navigator.maxTouchPoints > 0);
+            isDesktop = !isMobile;
+            
+            // Обновляем текст инструкции
+            if (instructionsElement) {
+                instructionsElement.textContent = isDesktop ? 
+                    'Управление: двигайте мышью • Разбейте все кирпичи, чтобы перейти на следующий уровень' :
+                    'Коснитесь и удерживайте, чтобы двигать ракетку • Разбейте все кирпичи, чтобы перейти на следующий уровень';
+            }
+            
+            // Показываем подсказку для десктопа
+            if (isDesktop && desktopHint) {
+                setTimeout(() => {
+                    desktopHint.classList.add('show-hint');
+                    setTimeout(() => {
+                        desktopHint.classList.remove('show-hint');
+                    }, 3000);
+                }, 1000);
+            }
+        }
+        
+        // Обработчик установки PWA
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            installBtn.style.display = 'block';
+        });
+        
+        // Обработчик нажатия кнопки установки
+        installBtn.addEventListener('click', async () => {
+            if (!deferredPrompt) return;
+            
+            installBtn.style.display = 'none';
+            
+            try {
+                await deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                console.log(`Результат установки: ${outcome}`);
+                deferredPrompt = null;
+            } catch (error) {
+                console.error('Ошибка при установке приложения:', error);
+                installBtn.style.display = 'block';
+            }
+        });
+        
+        // Проверка офлайн-статуса
+        window.addEventListener('online', () => {
+            offlineBadge.style.display = 'none';
+        });
+        
+        window.addEventListener('offline', () => {
+            offlineBadge.style.display = 'block';
+        });
+        
+        // Инициализация игры при нажатии кнопки
+        startBtn.addEventListener('click', () => {
+            gameStartScreen.style.display = 'none';
+            gameStarted = true;
+            initGame();
+        });
+        
+        restartBtn.addEventListener('click', () => {
+            gameOverScreen.style.display = 'none';
+            resetGame();
+            initGame();
+        });
+        
+        nextLevelBtn.addEventListener('click', () => {
+            levelCompleteScreen.style.display = 'none';
+            level++;
+            initGame();
+        });
+        
+        // Сброс игры
+        function resetGame() {
+            score = 0;
+            lives = 3;
+            level = 1;
+            gameOver = false;
+            updateScoreDisplay();
+        }
+        
+        // Обновление отображения счёта
+        function updateScoreDisplay() {
+            scoreDisplay.textContent = `Счёт: ${score}`;
+            livesDisplay.textContent = `Жизни: ${lives}`;
+            levelDisplay.textContent = `Уровень: ${level}`;
+        }
+        
+        // Инициализация игры Phaser
+        function initGame() {
+            if (game) {
+                game.destroy(true);
+            }
+            
+            updateScoreDisplay();
+            
+            const config = {
+                type: Phaser.AUTO,
+                width: 480,
+                height: 720,
+                parent: 'game-container',
+                scene: {
+                    preload: preload,
+                    create: create,
+                    update: update
+                },
+                physics: {
+                    default: 'arcade',
+                    arcade: {
+                        debug: false,
+                        gravity: { y: 0 }
+                    }
+                },
+                scale: {
+                    mode: Phaser.Scale.FIT,
+                    autoCenter: Phaser.Scale.CENTER_BOTH
+                }
+            };
+            
+            game = new Phaser.Game(config);
+        }
+        
+        // Фаза загрузки
+        function preload() {
+            // Нет внешних ресурсов - всё создаётся программно
+        }
+        
+        // Фаза создания
+        function create() {
+            // Создание кирпичей
+            const bricks = this.physics.add.staticGroup();
+            bricksDestroyed = 0;
+            
+            // Параметры кирпичей в зависимости от уровня
+            const brickInfo = {
+                width: 62,
+                height: 26,
+                offset: 42,
+                padding: 8,
+                rows: Math.min(7, 4 + Math.floor(level / 2)), // Увеличение рядов с уровнем
+                columns: 6
+            };
+            
+            totalBricks = brickInfo.rows * brickInfo.columns;
+            
+            // Цвета для рядов кирпичей
+            const colors = [0xff5252, 0xff9e44, 0xffcc00, 0x4a90e2, 0x5affb3, 0x9c27b0, 0xe91e63];
+            
+            // Создание кирпичей
+            for (let c = 0; c < brickInfo.columns; c++) {
+                for (let r = 0; r < brickInfo.rows; r++) {
+                    const brickX = (c * (brickInfo.width + brickInfo.padding)) + brickInfo.offset + brickInfo.width/2;
+                    const brickY = (r * (brickInfo.height + brickInfo.padding)) + brickInfo.offset + brickInfo.height/2;
+                    
+                    const brick = this.add.rectangle(
+                        brickX, 
+                        brickY, 
+                        brickInfo.width, 
+                        brickInfo.height, 
+                        colors[r % colors.length]
+                    );
+                    
+                    brick.setOrigin(0.5, 0.5);
+                    brick.setStrokeStyle(2, 0x1a2b3c);
+                    brick.setDepth(1);
+                    
+                    this.physics.add.existing(brick, true);
+                    bricks.add(brick);
+                }
+            }
+            
+            // Создание ракетки
+            const paddle = this.add.rectangle(240, 650, 110, 22, 0x4a90e2);
+            paddle.setStrokeStyle(3, 0x2a5b9a);
+            paddle.setDepth(2);
+            this.physics.add.existing(paddle, true);
+            paddle.body.setImmovable(true);
+            paddle.body.setCollideWorldBounds(true);
+            
+            // Создание мяча
+            const ball = this.add.circle(240, 620, 11, 0xffcc00);
+            ball.setStrokeStyle(2, 0xff9900);
+            ball.setDepth(3);
+            this.physics.add.existing(ball);
+            ball.body.setCollideWorldBounds(true);
+            ball.body.setBounce(1, 1);
+            ball.body.setCircle(11);
+            ball.body.setMass(1);
+            
+            // Установка начальной скорости мяча
+            const angle = Phaser.Math.DegToRad(Phaser.Math.Between(35, 145));
+            const direction = Phaser.Math.Between(0, 1) ? 1 : -1;
+            ball.body.setVelocity(
+                Math.cos(angle) * ballSpeed * direction,
+                -Math.sin(angle) * ballSpeed
+            );
+            
+            // Настройка коллизий
+            this.physics.add.collider(ball, paddle, ballPaddleCollision, null, this);
+            this.physics.add.collider(ball, bricks, ballBrickCollision, null, this);
+            
+            // Состояние для тач-управления
+            let isTouchActive = false;
+            let touchStartX = 0;
+            let touchStartPaddleX = 0;
+            
+            // Обработчик нажатия указателя
+            this.input.on('pointerdown', (pointer) => {
+                if (!gameStarted || gameOver) return;
+                
+                // Для тача: запоминаем начальные позиции
+                if (pointer.pointerType === 'touch' && !isTouchActive) {
+                    isTouchActive = true;
+                    touchStartX = pointer.x;
+                    touchStartPaddleX = paddle.x;
+                }
+                // Для мыши ничего не делаем - управление без удержания
+            });
+            
+            // Обработчик движения указателя
+            this.input.on('pointermove', (pointer) => {
+                if (!gameStarted || gameOver) return;
+                
+                if (pointer.pointerType === 'mouse') {
+                    // Управление мышью: напрямую следуем за курсором
+                    const bounds = paddle.body.world.bounds;
+                    const paddleHalfWidth = paddle.width / 2;
+                    paddle.x = Phaser.Math.Clamp(
+                        pointer.x,
+                        bounds.left + paddleHalfWidth,
+                        bounds.right - paddleHalfWidth
+                    );
+                } else if (pointer.pointerType === 'touch' && isTouchActive) {
+                    // Управление тачем: относительное перемещение
+                    const deltaX = pointer.x - touchStartX;
+                    const newX = touchStartPaddleX + deltaX;
+                    const bounds = paddle.body.world.bounds;
+                    const paddleHalfWidth = paddle.width / 2;
+                    
+                    paddle.x = Phaser.Math.Clamp(
+                        newX,
+                        bounds.left + paddleHalfWidth,
+                        bounds.right - paddleHalfWidth
+                    );
+                }
+            });
+            
+            // Обработчик отпускания указателя
+            this.input.on('pointerup', (pointer) => {
+                if (pointer.pointerType === 'touch') {
+                    isTouchActive = false;
+                }
+            });
+            
+            // Обработчик выхода указателя за пределы
+            this.input.on('pointerout', (pointer) => {
+                if (pointer.pointerType === 'touch' && isTouchActive) {
+                    isTouchActive = false;
+                }
+            });
+            
+            // Текстовые элементы
+            this.add.text(15, 15, 'Счёт: 0', { 
+                font: '22px Arial', 
+                fill: '#4a90e2',
+                stroke: '#0a1420',
+                strokeThickness: 4,
+                fontWeight: 'bold'
+            }).setDepth(10);
+            
+            this.add.text(385, 15, 'Жизни: 3', { 
+                font: '22px Arial', 
+                fill: '#ff5252',
+                stroke: '#0a1420',
+                strokeThickness: 4,
+                fontWeight: 'bold'
+            }).setOrigin(1, 0).setDepth(10);
+            
+            this.add.text(240, 15, `Уровень: ${level}`, { 
+                font: '22px Arial', 
+                fill: '#5affb3',
+                stroke: '#0a1420',
+                strokeThickness: 4,
+                fontWeight: 'bold'
+            }).setOrigin(0.5, 0).setDepth(10);
+            
+            // Сохранение ссылок на объекты для глобального доступа
+            window.gameObjects = { ball, paddle, bricks };
+        }
+        
+        // Фаза обновления
+        function update() {
+            if (gameOver || !window.gameObjects) return;
+            
+            const { ball, paddle, bricks } = window.gameObjects;
+            
+            // Проверка падения мяча
+            if (ball.y > 730) {
+                lives--;
+                updateScoreDisplay();
+                document.getElementById('lives-display').textContent = `Жизни: ${lives}`;
+                
+                if (lives <= 0) {
+                    gameOver = true;
+                    finalScoreDisplay.textContent = `Счёт: ${score}`;
+                    gameOverScreen.style.display = 'flex';
+                } else {
+                    // Сброс позиции мяча и ракетки
+                    ball.setPosition(240, 620);
+                    paddle.setPosition(240, 650);
+                    
+                    // Новая скорость мяча
+                    const angle = Phaser.Math.DegToRad(Phaser.Math.Between(35, 145));
+                    const direction = Phaser.Math.Between(0, 1) ? 1 : -1;
+                    ball.body.setVelocity(
+                        Math.cos(angle) * ballSpeed * direction,
+                        -Math.sin(angle) * ballSpeed
+                    );
+                }
+            }
+            
+            // Проверка завершения уровня
+            if (bricksDestroyed >= totalBricks) {
+                levelScoreDisplay.textContent = `Счёт: ${score}`;
+                levelCompleteScreen.style.display = 'flex';
+                gameOver = true;
+            }
+        }
+        
+        // Обработчик столкновения мяча и ракетки
+        function ballPaddleCollision(ball, paddle) {
+            const paddleCenter = paddle.x;
+            const ballOffset = ball.x - paddleCenter;
+            const normalizedOffset = ballOffset / (paddle.width / 2);
+            
+            // Расчёт угла отскока в зависимости от места попадания
+            const maxAngle = 75; // Максимальный угол в градусах
+            const angle = Phaser.Math.DegToRad(90 - (normalizedOffset * maxAngle));
+            const currentSpeed = Math.sqrt(ball.body.velocity.x ** 2 + ball.body.velocity.y ** 2);
+            
+            // Установка новой скорости с сохранением величины
+            ball.body.setVelocity(
+                Math.cos(angle) * currentSpeed * Math.sign(normalizedOffset || 1),
+                -Math.sin(angle) * currentSpeed
+            );
+            
+            // Постепенное увеличение скорости (до предела)
+            if (ballSpeed < 480) {
+                ballSpeed += 3;
+            }
+            
+            // Визуальный эффект при ударе
+            ball.setFillStyle(0xffe082, 1);
+            setTimeout(() => {
+                if (ball) ball.setFillStyle(0xffcc00, 1);
+            }, 100);
+        }
+        
+        // Обработчик столкновения мяча и кирпича
+        function ballBrickCollision(ball, brick) {
+            brick.destroy();
+            bricksDestroyed++;
+            
+            // Обновление счёта
+            score += 15 * level;
+            updateScoreDisplay();
+            document.getElementById('score-display').textContent = `Счёт: ${score}`;
+        }
+        
+        // Регистрация Service Worker
+        async function registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registration = await navigator.serviceWorker.register('/service-worker.js', {
+                        scope: '/'
+                    });
+                    console.log('Service Worker зарегистрирован:', registration.scope);
+                    
+                    // Проверка обновлений
+                    registration.addEventListener('updatefound', () => {
+                        const newWorker = registration.installing;
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                console.log('Доступна новая версия игры. Перезагрузите страницу для обновления.');
+                            }
+                        });
+                    });
+                } catch (error) {
+                    console.error('Ошибка регистрации Service Worker:', error);
+                }
+            }
+        }
+        
+        // Инициализация при загрузке страницы
+        window.addEventListener('load', async () => {
+            // Определяем тип устройства
+            detectDeviceType();
+            
+            // Регистрация Service Worker
+            await registerServiceWorker();
+            
+            // Показ кнопки установки на мобильных устройствах
+            if (!isDesktop && deferredPrompt) {
+                setTimeout(() => {
+                    installBtn.style.display = 'block';
+                }, 3000);
+            }
+            
+            // Показ офлайн-бейджа при загрузке в офлайн-режиме
+            if (!navigator.onLine) {
+                offlineBadge.style.display = 'block';
+            }
+            
+            // Обновление отображения счёта
+            updateScoreDisplay();
+            
+            // Скрытие подсказки для десктопа при взаимодействии
+            document.addEventListener('mousemove', () => {
+                if (desktopHint && desktopHint.classList.contains('show-hint')) {
+                    desktopHint.classList.remove('show-hint');
+                }
+            }, { once: true });
+        });
+    </script>
+</body>
+</html>
