@@ -8,8 +8,9 @@
     <meta name="theme-color" content="#1a2b3c">
     <title>Арканоид PWA</title>
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Ccircle cx='90' cy='90' r='80' fill='%234a90e2'/%3E%3Crect x='60' y='60' width='60' height='60' fill='%23ffcc00' rx='5'/%3E%3C/svg%3E">
+    <link rel="apple-touch-icon" href="image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Ccircle cx='90' cy='90' r='80' fill='%234a90e2'/%3E%3Crect x='60' y='60' width='60' height='60' fill='%23ffcc00' rx='5'/%3E%3C/svg%3E">
     <style>
+        /* ... все предыдущие стили без изменений ... */
         * {
             margin: 0;
             padding: 0;
@@ -41,7 +42,11 @@
             background: #0a1420;
             border: 4px solid #2a4b6a;
             touch-action: none;
-            cursor: default;
+            cursor: grab; /* Визуальная подсказка для десктопа */
+        }
+        
+        #game-container:active {
+            cursor: grabbing;
         }
         
         canvas {
@@ -283,6 +288,23 @@
             opacity: 1;
         }
         
+        #error-container {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ff5252;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            z-index: 10000;
+            display: none;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+            max-width: 90%;
+            text-align: center;
+        }
+        
         @media (max-height: 700px) {
             #instructions {
                 bottom: 8px;
@@ -319,16 +341,11 @@
                 padding: 3px 8px;
             }
         }
-        
-        @media (prefers-reduced-motion: reduce) {
-            * {
-                transition: none !important;
-                animation: none !important;
-            }
-        }
     </style>
 </head>
 <body>
+    <div id="error-container"></div>
+    
     <div id="game-container">
         <div id="score-display">Счёт: 0</div>
         <div id="lives-display">Жизни: 3</div>
@@ -365,6 +382,19 @@
     
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
     <script>
+        // Отображение ошибок
+        function showError(message) {
+            const errorContainer = document.getElementById('error-container');
+            errorContainer.textContent = `Ошибка: ${message}`;
+            errorContainer.style.display = 'block';
+            console.error('Игровая ошибка:', message);
+        }
+        
+        // Проверка загрузки Phaser
+        if (typeof Phaser === 'undefined') {
+            showError('Phaser не загружен. Проверьте интернет-соединение.');
+        }
+        
         // Глобальные переменные игры
         let game;
         let score = 0;
@@ -373,8 +403,6 @@
         let ballSpeed = 250;
         let gameOver = false;
         let gameStarted = false;
-        let bricksDestroyed = 0;
-        let totalBricks = 0;
         let deferredPrompt = null;
         let isDesktop = false;
         
@@ -394,6 +422,7 @@
         const offlineBadge = document.getElementById('offline-badge');
         const desktopHint = document.getElementById('desktop-hint');
         const instructionsElement = document.getElementById('instructions');
+        const gameContainer = document.getElementById('game-container');
         
         // Определение типа устройства
         function detectDeviceType() {
@@ -417,6 +446,11 @@
                         desktopHint.classList.remove('show-hint');
                     }, 3000);
                 }, 1000);
+            }
+            
+            // Устанавливаем курсор для десктопа
+            if (isDesktop) {
+                gameContainer.style.cursor = 'grab';
             }
         }
         
@@ -490,283 +524,309 @@
         
         // Инициализация игры Phaser
         function initGame() {
-            if (game) {
-                game.destroy(true);
-            }
-            
-            updateScoreDisplay();
-            
-            const config = {
-                type: Phaser.AUTO,
-                width: 480,
-                height: 720,
-                parent: 'game-container',
-                scene: {
-                    preload: preload,
-                    create: create,
-                    update: update
-                },
-                physics: {
-                    default: 'arcade',
-                    arcade: {
-                        debug: false,
-                        gravity: { y: 0 }
-                    }
-                },
-                scale: {
-                    mode: Phaser.Scale.FIT,
-                    autoCenter: Phaser.Scale.CENTER_BOTH
+            try {
+                if (game) {
+                    game.destroy(true);
                 }
-            };
-            
-            game = new Phaser.Game(config);
-        }
-        
-        // Фаза загрузки
-        function preload() {
-            // Нет внешних ресурсов - всё создаётся программно
-        }
-        
-        // Фаза создания
-        function create() {
-            // Создание кирпичей
-            const bricks = this.physics.add.staticGroup();
-            bricksDestroyed = 0;
-            
-            // Параметры кирпичей в зависимости от уровня
-            const brickInfo = {
-                width: 62,
-                height: 26,
-                offset: 42,
-                padding: 8,
-                rows: Math.min(7, 4 + Math.floor(level / 2)), // Увеличение рядов с уровнем
-                columns: 6
-            };
-            
-            totalBricks = brickInfo.rows * brickInfo.columns;
-            
-            // Цвета для рядов кирпичей
-            const colors = [0xff5252, 0xff9e44, 0xffcc00, 0x4a90e2, 0x5affb3, 0x9c27b0, 0xe91e63];
-            
-            // Создание кирпичей
-            for (let c = 0; c < brickInfo.columns; c++) {
-                for (let r = 0; r < brickInfo.rows; r++) {
-                    const brickX = (c * (brickInfo.width + brickInfo.padding)) + brickInfo.offset + brickInfo.width/2;
-                    const brickY = (r * (brickInfo.height + brickInfo.padding)) + brickInfo.offset + brickInfo.height/2;
-                    
-                    const brick = this.add.rectangle(
-                        brickX, 
-                        brickY, 
-                        brickInfo.width, 
-                        brickInfo.height, 
-                        colors[r % colors.length]
-                    );
-                    
-                    brick.setOrigin(0.5, 0.5);
-                    brick.setStrokeStyle(2, 0x1a2b3c);
-                    brick.setDepth(1);
-                    
-                    this.physics.add.existing(brick, true);
-                    bricks.add(brick);
-                }
-            }
-            
-            // Создание ракетки
-            const paddle = this.add.rectangle(240, 650, 110, 22, 0x4a90e2);
-            paddle.setStrokeStyle(3, 0x2a5b9a);
-            paddle.setDepth(2);
-            this.physics.add.existing(paddle, true);
-            paddle.body.setImmovable(true);
-            paddle.body.setCollideWorldBounds(true);
-            
-            // Создание мяча
-            const ball = this.add.circle(240, 620, 11, 0xffcc00);
-            ball.setStrokeStyle(2, 0xff9900);
-            ball.setDepth(3);
-            this.physics.add.existing(ball);
-            ball.body.setCollideWorldBounds(true);
-            ball.body.setBounce(1, 1);
-            ball.body.setCircle(11);
-            ball.body.setMass(1);
-            
-            // Установка начальной скорости мяча
-            const angle = Phaser.Math.DegToRad(Phaser.Math.Between(35, 145));
-            const direction = Phaser.Math.Between(0, 1) ? 1 : -1;
-            ball.body.setVelocity(
-                Math.cos(angle) * ballSpeed * direction,
-                -Math.sin(angle) * ballSpeed
-            );
-            
-            // Настройка коллизий
-            this.physics.add.collider(ball, paddle, ballPaddleCollision, null, this);
-            this.physics.add.collider(ball, bricks, ballBrickCollision, null, this);
-            
-            // Состояние для тач-управления
-            let isTouchActive = false;
-            let touchStartX = 0;
-            let touchStartPaddleX = 0;
-            
-            // Обработчик нажатия указателя
-            this.input.on('pointerdown', (pointer) => {
-                if (!gameStarted || gameOver) return;
                 
-                // Для тача: запоминаем начальные позиции
-                if (pointer.pointerType === 'touch' && !isTouchActive) {
-                    isTouchActive = true;
-                    touchStartX = pointer.x;
-                    touchStartPaddleX = paddle.x;
-                }
-                // Для мыши ничего не делаем - управление без удержания
-            });
-            
-            // Обработчик движения указателя
-            this.input.on('pointermove', (pointer) => {
-                if (!gameStarted || gameOver) return;
-                
-                if (pointer.pointerType === 'mouse') {
-                    // Управление мышью: напрямую следуем за курсором
-                    const bounds = paddle.body.world.bounds;
-                    const paddleHalfWidth = paddle.width / 2;
-                    paddle.x = Phaser.Math.Clamp(
-                        pointer.x,
-                        bounds.left + paddleHalfWidth,
-                        bounds.right - paddleHalfWidth
-                    );
-                } else if (pointer.pointerType === 'touch' && isTouchActive) {
-                    // Управление тачем: относительное перемещение
-                    const deltaX = pointer.x - touchStartX;
-                    const newX = touchStartPaddleX + deltaX;
-                    const bounds = paddle.body.world.bounds;
-                    const paddleHalfWidth = paddle.width / 2;
-                    
-                    paddle.x = Phaser.Math.Clamp(
-                        newX,
-                        bounds.left + paddleHalfWidth,
-                        bounds.right - paddleHalfWidth
-                    );
-                }
-            });
-            
-            // Обработчик отпускания указателя
-            this.input.on('pointerup', (pointer) => {
-                if (pointer.pointerType === 'touch') {
-                    isTouchActive = false;
-                }
-            });
-            
-            // Обработчик выхода указателя за пределы
-            this.input.on('pointerout', (pointer) => {
-                if (pointer.pointerType === 'touch' && isTouchActive) {
-                    isTouchActive = false;
-                }
-            });
-            
-            // Текстовые элементы
-            this.add.text(15, 15, 'Счёт: 0', { 
-                font: '22px Arial', 
-                fill: '#4a90e2',
-                stroke: '#0a1420',
-                strokeThickness: 4,
-                fontWeight: 'bold'
-            }).setDepth(10);
-            
-            this.add.text(385, 15, 'Жизни: 3', { 
-                font: '22px Arial', 
-                fill: '#ff5252',
-                stroke: '#0a1420',
-                strokeThickness: 4,
-                fontWeight: 'bold'
-            }).setOrigin(1, 0).setDepth(10);
-            
-            this.add.text(240, 15, `Уровень: ${level}`, { 
-                font: '22px Arial', 
-                fill: '#5affb3',
-                stroke: '#0a1420',
-                strokeThickness: 4,
-                fontWeight: 'bold'
-            }).setOrigin(0.5, 0).setDepth(10);
-            
-            // Сохранение ссылок на объекты для глобального доступа
-            window.gameObjects = { ball, paddle, bricks };
-        }
-        
-        // Фаза обновления
-        function update() {
-            if (gameOver || !window.gameObjects) return;
-            
-            const { ball, paddle, bricks } = window.gameObjects;
-            
-            // Проверка падения мяча
-            if (ball.y > 730) {
-                lives--;
                 updateScoreDisplay();
-                document.getElementById('lives-display').textContent = `Жизни: ${lives}`;
                 
-                if (lives <= 0) {
-                    gameOver = true;
-                    finalScoreDisplay.textContent = `Счёт: ${score}`;
-                    gameOverScreen.style.display = 'flex';
-                } else {
-                    // Сброс позиции мяча и ракетки
-                    ball.setPosition(240, 620);
-                    paddle.setPosition(240, 650);
+                // Создаём сцену как объект с методами
+                const gameScene = {
+                    preload: function() {
+                        // Нет внешних ресурсов
+                    },
                     
-                    // Новая скорость мяча
-                    const angle = Phaser.Math.DegToRad(Phaser.Math.Between(35, 145));
-                    const direction = Phaser.Math.Between(0, 1) ? 1 : -1;
-                    ball.body.setVelocity(
-                        Math.cos(angle) * ballSpeed * direction,
-                        -Math.sin(angle) * ballSpeed
-                    );
-                }
+                    create: function() {
+                        try {
+                            // Сохраняем флаг режима устройства в сцене
+                            this.isDesktopMode = isDesktop;
+                            
+                            // Создание кирпичей (статические тела)
+                            this.bricks = this.physics.add.staticGroup();
+                            this.bricksDestroyed = 0;
+                            
+                            // Параметры кирпичей
+                            const brickInfo = {
+                                width: 62,
+                                height: 26,
+                                offset: 42,
+                                padding: 8,
+                                rows: Math.min(7, 4 + Math.floor(level / 2)),
+                                columns: 6
+                            };
+                            
+                            this.totalBricks = brickInfo.rows * brickInfo.columns;
+                            
+                            // Цвета для рядов кирпичей
+                            const colors = [0xff5252, 0xff9e44, 0xffcc00, 0x4a90e2, 0x5affb3, 0x9c27b0, 0xe91e63];
+                            
+                            // Создание кирпичей
+                            for (let c = 0; c < brickInfo.columns; c++) {
+                                for (let r = 0; r < brickInfo.rows; r++) {
+                                    const brickX = (c * (brickInfo.width + brickInfo.padding)) + brickInfo.offset + brickInfo.width/2;
+                                    const brickY = (r * (brickInfo.height + brickInfo.padding)) + brickInfo.offset + brickInfo.height/2;
+                                    
+                                    const brick = this.add.rectangle(
+                                        brickX, 
+                                        brickY, 
+                                        brickInfo.width, 
+                                        brickInfo.height, 
+                                        colors[r % colors.length]
+                                    );
+                                    
+                                    brick.setOrigin(0.5, 0.5);
+                                    brick.setStrokeStyle(2, 0x1a2b3c);
+                                    brick.setDepth(1);
+                                    
+                                    // Добавляем как СТАТИЧЕСКОЕ тело (второй параметр true)
+                                    this.physics.add.existing(brick, true);
+                                    this.bricks.add(brick);
+                                }
+                            }
+                            
+                            // Создание ракетки (ДИНАМИЧЕСКОЕ тело, но неподвижное)
+                            this.paddle = this.add.rectangle(240, 650, 110, 22, 0x4a90e2);
+                            this.paddle.setStrokeStyle(3, 0x2a5b9a);
+                            this.paddle.setDepth(2);
+                            // Добавляем как ДИНАМИЧЕСКОЕ тело (без второго параметра)
+                            this.physics.add.existing(this.paddle);
+                            // Делаем тело неподвижным для физики (но можем двигать программно)
+                            this.paddle.body.setImmovable(true);
+                            this.paddle.body.setCollideWorldBounds(true);
+                            
+                            // Создание мяча (ДИНАМИЧЕСКОЕ тело)
+                            this.ball = this.add.circle(240, 620, 11, 0xffcc00);
+                            this.ball.setStrokeStyle(2, 0xff9900);
+                            this.ball.setDepth(3);
+                            this.physics.add.existing(this.ball);
+                            this.ball.body.setCollideWorldBounds(true, 1, 1); // Отскок от границ
+                            this.ball.body.setBounce(1, 1);
+                            this.ball.body.setCircle(10); // Радиус для коллизий
+                            
+                            // Установка начальной скорости мяча
+                            const angle = Phaser.Math.DegToRad(Phaser.Math.Between(35, 145));
+                            const direction = Phaser.Math.Between(0, 1) ? 1 : -1;
+                            this.ball.body.setVelocity(
+                                Math.cos(angle) * ballSpeed * direction,
+                                -Math.sin(angle) * ballSpeed
+                            );
+                            
+                            // Настройка коллизий
+                            this.physics.add.collider(this.ball, this.paddle, this.ballPaddleCollision, null, this);
+                            this.physics.add.collider(this.ball, this.bricks, this.ballBrickCollision, null, this);
+                            
+                            // Состояние для тач-управления
+                            this.isTouchActive = false;
+                            this.touchStartX = 0;
+                            this.touchStartPaddleX = 0;
+                            
+                            // Обработчики ввода ТОЛЬКО для тач-устройств
+                            if (!this.isDesktopMode) {
+                                this.input.on('pointerdown', (pointer) => {
+                                    if (!gameStarted || gameOver) return;
+                                    if (pointer.pointerType === 'touch') {
+                                        this.isTouchActive = true;
+                                        this.touchStartX = pointer.x;
+                                        this.touchStartPaddleX = this.paddle.x;
+                                    }
+                                }, this);
+                                
+                                this.input.on('pointermove', (pointer) => {
+                                    if (!gameStarted || gameOver) return;
+                                    if (pointer.pointerType === 'touch' && this.isTouchActive) {
+                                        const deltaX = pointer.x - this.touchStartX;
+                                        const newX = this.touchStartPaddleX + deltaX;
+                                        const bounds = this.physics.world.bounds;
+                                        const paddleHalfWidth = this.paddle.width / 2;
+                                        this.paddle.x = Phaser.Math.Clamp(
+                                            newX,
+                                            bounds.left + paddleHalfWidth,
+                                            bounds.right - paddleHalfWidth
+                                        );
+                                    }
+                                }, this);
+                                
+                                this.input.on('pointerup', (pointer) => {
+                                    if (pointer.pointerType === 'touch') {
+                                        this.isTouchActive = false;
+                                    }
+                                }, this);
+                                
+                                this.input.on('pointerout', (pointer) => {
+                                    if (pointer.pointerType === 'touch' && this.isTouchActive) {
+                                        this.isTouchActive = false;
+                                    }
+                                }, this);
+                            }
+                            
+                            // Текстовые элементы
+                            this.scoreText = this.add.text(15, 15, 'Счёт: 0', { 
+                                font: '22px Arial', 
+                                fill: '#4a90e2',
+                                stroke: '#0a1420',
+                                strokeThickness: 4,
+                                fontWeight: 'bold'
+                            }).setDepth(10);
+                            
+                            this.livesText = this.add.text(385, 15, 'Жизни: 3', { 
+                                font: '22px Arial', 
+                                fill: '#ff5252',
+                                stroke: '#0a1420',
+                                strokeThickness: 4,
+                                fontWeight: 'bold'
+                            }).setOrigin(1, 0).setDepth(10);
+                            
+                            this.levelText = this.add.text(240, 15, `Уровень: ${level}`, { 
+                                font: '22px Arial', 
+                                fill: '#5affb3',
+                                stroke: '#0a1420',
+                                strokeThickness: 4,
+                                fontWeight: 'bold'
+                            }).setOrigin(0.5, 0).setDepth(10);
+                            
+                            console.log('Сцена успешно создана. Режим:', this.isDesktopMode ? 'Десктоп' : 'Мобильный');
+                        } catch (error) {
+                            showError('Ошибка создания сцены: ' + error.message);
+                            console.error(error);
+                        }
+                    },
+                    
+                    update: function() {
+                        if (gameOver || !gameStarted) return;
+                        
+                        // КРИТИЧЕСКАЯ ПРОВЕРКА: убедимся, что объекты существуют
+                        if (!this.ball || !this.paddle || !this.bricks) {
+                            console.warn('Игровые объекты не готовы');
+                            return;
+                        }
+                        
+                        try {
+                            // УПРАВЛЕНИЕ МЫШЬЮ ДЛЯ ДЕСКТОПА (работает в каждом кадре)
+                            if (this.isDesktopMode && this.input.mousePointer) {
+                                const bounds = this.physics.world.bounds;
+                                const paddleHalfWidth = this.paddle.width / 2;
+                                // Используем x координату мыши напрямую
+                                this.paddle.x = Phaser.Math.Clamp(
+                                    this.input.mousePointer.x,
+                                    bounds.left + paddleHalfWidth,
+                                    bounds.right - paddleHalfWidth
+                                );
+                            }
+                            
+                            // Проверка падения мяча (ниже нижней границы)
+                            if (this.ball.y > this.physics.world.bounds.height + 20) {
+                                lives--;
+                                updateScoreDisplay();
+                                this.livesText.setText(`Жизни: ${lives}`);
+                                
+                                if (lives <= 0) {
+                                    gameOver = true;
+                                    finalScoreDisplay.textContent = `Счёт: ${score}`;
+                                    gameOverScreen.style.display = 'flex';
+                                } else {
+                                    // Сброс позиции мяча и ракетки
+                                    this.ball.setPosition(240, 620);
+                                    this.paddle.setPosition(240, 650);
+                                    
+                                    // Новая скорость мяча
+                                    const angle = Phaser.Math.DegToRad(Phaser.Math.Between(35, 145));
+                                    const direction = Phaser.Math.Between(0, 1) ? 1 : -1;
+                                    this.ball.body.setVelocity(
+                                        Math.cos(angle) * ballSpeed * direction,
+                                        -Math.sin(angle) * ballSpeed
+                                    );
+                                }
+                            }
+                            
+                            // Проверка завершения уровня
+                            if (this.bricksDestroyed >= this.totalBricks) {
+                                levelScoreDisplay.textContent = `Счёт: ${score}`;
+                                levelCompleteScreen.style.display = 'flex';
+                                gameOver = true;
+                            }
+                        } catch (error) {
+                            showError('Ошибка в игровом цикле: ' + error.message);
+                            console.error(error);
+                        }
+                    },
+                    
+                    ballPaddleCollision: function(ball, paddle) {
+                        const paddleCenter = paddle.x;
+                        const ballOffset = ball.x - paddleCenter;
+                        const normalizedOffset = ballOffset / (paddle.width / 2);
+                        
+                        // Расчёт угла отскока
+                        const maxAngle = 75;
+                        const angle = Phaser.Math.DegToRad(90 - (normalizedOffset * maxAngle));
+                        const currentSpeed = Math.sqrt(ball.body.velocity.x ** 2 + ball.body.velocity.y ** 2);
+                        
+                        // Установка новой скорости
+                        ball.body.setVelocity(
+                            Math.cos(angle) * currentSpeed * Math.sign(normalizedOffset || 1),
+                            -Math.sin(angle) * currentSpeed
+                        );
+                        
+                        // Увеличение скорости
+                        if (ballSpeed < 480) {
+                            ballSpeed += 3;
+                        }
+                        
+                        // Визуальный эффект
+                        ball.setFillStyle(0xffe082, 1);
+                        this.time.delayedCall(100, () => {
+                            if (ball && ball.active) ball.setFillStyle(0xffcc00, 1);
+                        });
+                    },
+                    
+                    ballBrickCollision: function(ball, brick) {
+                        brick.destroy();
+                        this.bricksDestroyed++;
+                        
+                        // Обновление счёта
+                        score += 15 * level;
+                        updateScoreDisplay();
+                        this.scoreText.setText(`Счёт: ${score}`);
+                        
+                        // Простой визуальный эффект
+                        this.tweens.add({
+                            targets: brick,
+                            alpha: 0,
+                            duration: 100,
+                            onComplete: () => {
+                                if (brick && brick.active) brick.destroy();
+                            }
+                        });
+                    }
+                };
+                
+                const config = {
+                    type: Phaser.AUTO,
+                    width: 480,
+                    height: 720,
+                    parent: 'game-container',
+                    backgroundColor: '#0a1420',
+                    scene: gameScene,
+                    physics: {
+                        default: 'arcade',
+                        arcade: {
+                            debug: false,
+                            gravity: { y: 0 },
+                            // Устанавливаем границы мира точно по размеру игры
+                            width: 480,
+                            height: 720
+                        }
+                    },
+                    scale: {
+                        mode: Phaser.Scale.FIT,
+                        autoCenter: Phaser.Scale.CENTER_BOTH
+                    }
+                };
+                
+                game = new Phaser.Game(config);
+            } catch (error) {
+                showError('Ошибка инициализации игры: ' + error.message);
             }
-            
-            // Проверка завершения уровня
-            if (bricksDestroyed >= totalBricks) {
-                levelScoreDisplay.textContent = `Счёт: ${score}`;
-                levelCompleteScreen.style.display = 'flex';
-                gameOver = true;
-            }
-        }
-        
-        // Обработчик столкновения мяча и ракетки
-        function ballPaddleCollision(ball, paddle) {
-            const paddleCenter = paddle.x;
-            const ballOffset = ball.x - paddleCenter;
-            const normalizedOffset = ballOffset / (paddle.width / 2);
-            
-            // Расчёт угла отскока в зависимости от места попадания
-            const maxAngle = 75; // Максимальный угол в градусах
-            const angle = Phaser.Math.DegToRad(90 - (normalizedOffset * maxAngle));
-            const currentSpeed = Math.sqrt(ball.body.velocity.x ** 2 + ball.body.velocity.y ** 2);
-            
-            // Установка новой скорости с сохранением величины
-            ball.body.setVelocity(
-                Math.cos(angle) * currentSpeed * Math.sign(normalizedOffset || 1),
-                -Math.sin(angle) * currentSpeed
-            );
-            
-            // Постепенное увеличение скорости (до предела)
-            if (ballSpeed < 480) {
-                ballSpeed += 3;
-            }
-            
-            // Визуальный эффект при ударе
-            ball.setFillStyle(0xffe082, 1);
-            setTimeout(() => {
-                if (ball) ball.setFillStyle(0xffcc00, 1);
-            }, 100);
-        }
-        
-        // Обработчик столкновения мяча и кирпича
-        function ballBrickCollision(ball, brick) {
-            brick.destroy();
-            bricksDestroyed++;
-            
-            // Обновление счёта
-            score += 15 * level;
-            updateScoreDisplay();
-            document.getElementById('score-display').textContent = `Счёт: ${score}`;
         }
         
         // Регистрация Service Worker
@@ -778,52 +838,57 @@
                     });
                     console.log('Service Worker зарегистрирован:', registration.scope);
                     
-                    // Проверка обновлений
                     registration.addEventListener('updatefound', () => {
                         const newWorker = registration.installing;
                         newWorker.addEventListener('statechange', () => {
                             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                console.log('Доступна новая версия игры. Перезагрузите страницу для обновления.');
+                                console.log('Доступна новая версия игры');
                             }
                         });
                     });
                 } catch (error) {
-                    console.error('Ошибка регистрации Service Worker:', error);
+                    console.warn('Не удалось зарегистрировать Service Worker:', error);
                 }
             }
         }
         
         // Инициализация при загрузке страницы
         window.addEventListener('load', async () => {
-            // Определяем тип устройства
-            detectDeviceType();
-            
-            // Регистрация Service Worker
-            await registerServiceWorker();
-            
-            // Показ кнопки установки на мобильных устройствах
-            if (!isDesktop && deferredPrompt) {
-                setTimeout(() => {
-                    installBtn.style.display = 'block';
-                }, 3000);
-            }
-            
-            // Показ офлайн-бейджа при загрузке в офлайн-режиме
-            if (!navigator.onLine) {
-                offlineBadge.style.display = 'block';
-            }
-            
-            // Обновление отображения счёта
-            updateScoreDisplay();
-            
-            // Скрытие подсказки для десктопа при взаимодействии
-            document.addEventListener('mousemove', () => {
-                if (desktopHint && desktopHint.classList.contains('show-hint')) {
-                    desktopHint.classList.remove('show-hint');
+            try {
+                // Определяем тип устройства
+                detectDeviceType();
+                
+                // Регистрация Service Worker
+                registerServiceWorker().catch(err => console.warn('SW error:', err));
+                
+                // Показ кнопки установки на мобильных
+                if (!isDesktop && deferredPrompt) {
+                    setTimeout(() => {
+                        installBtn.style.display = 'block';
+                    }, 3000);
                 }
-            }, { once: true });
+                
+                // Показ офлайн-бейджа
+                if (!navigator.onLine) {
+                    offlineBadge.style.display = 'block';
+                }
+                
+                // Обновление отображения счёта
+                updateScoreDisplay();
+                
+                // Скрытие подсказки при движении мыши
+                document.addEventListener('mousemove', () => {
+                    if (desktopHint && desktopHint.classList.contains('show-hint')) {
+                        desktopHint.classList.remove('show-hint');
+                    }
+                }, { once: true });
+                
+                console.log('Игра успешно инициализирована. Устройство:', isDesktop ? 'Десктоп' : 'Мобильное');
+            } catch (error) {
+                showError('Ошибка запуска игры: ' + error.message);
+                console.error(error);
+            }
         });
     </script>
 </body>
-
 </html>
